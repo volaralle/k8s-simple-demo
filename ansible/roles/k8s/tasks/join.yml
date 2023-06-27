@@ -1,0 +1,27 @@
+---
+
+- block:
+  - name: "Join master in to the cluster"
+    shell: "{{ join_result.stdout }} --control-plane"
+  - name: Templating vip-pod file.
+    template:
+      src: "templates/vip-Pod.yaml.j2"
+      dest: /etc/kubernetes/manifests/vip-Pod.yaml
+      mode: '0600'
+  when:  (inventory_hostname in groups["k8s-master"] and inventory_hostname != "{{ groups['k8s-master'][0] }}")
+
+- name: Kubectl taint nodes
+  shell: |
+      kubectl taint nodes --all node-role.kubernetes.io/master:NoSchedule
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  delegate_to: "{{ groups['k8s-master'][0] }}" 
+  ignore_errors: true
+  run_once: true
+  tags: taint
+
+- block:
+  - name: "Join node in to the cluster"
+    shell: "{{ join_result.stdout }}"
+  when: inventory_hostname in groups["k8s-worker"]
+  ignore_errors: true

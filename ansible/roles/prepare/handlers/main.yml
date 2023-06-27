@@ -1,0 +1,16 @@
+---
+- name: Restart docker
+  service: 
+    name: "docker.service" 
+    state: started
+  when: docker_service_started.changed == False
+  
+- name: Restart docker systemd
+  systemd:
+    name: "docker.service"
+    state: "restarted"
+    daemon_reload: yes 
+  when: docker_service_started.changed == False
+
+
+

@@ -1,0 +1,60 @@
+---
+- name: Create directory /tmp/external-exporters/
+  file:
+    path: /tmp/external-exporters
+    state: directory
+  delegate_to: localhost
+  tags: exporters
+  #"{{ groups['k8s-master'][0] }}" 
+  
+- name: Templating external exporters
+  template:
+    src: "external-exporters.yml.j2"
+    dest: "/tmp/external-exporters/external-exporters-{{ item.service }}.yaml"
+  with_items: "{{ external_exporters }}"
+  delegate_to: localhost
+  tags: exporters
+  #"{{ groups['k8s-master'][0] }}" 
+  
+  
+  
+  
+
+#  - name: Extract monitoring.tgz into /tmp
+#    unarchive:
+#      src: monitoring.tgz
+#      dest: /tmp
+#
+#  - name: Apply monitoring crd and other 
+#    shell: |
+#      kubectl create namespace monitoring
+#    environment:
+#      KUBECONFIG: /etc/kubernetes/admin.conf
+#    ignore_errors: yes
+#
+#  - name: Apply monitoring crd and other 
+#    shell: |
+#      kubectl apply \
+#        -f /tmp/manifests/setup/ --force-conflicts=true --server-side 
+#    environment:
+#      KUBECONFIG: /etc/kubernetes/admin.conf
+#    ignore_errors: yes
+#
+#  - name: Apply monitoring manifests
+#    shell: |
+#      kubectl apply \
+#        -f /tmp/manifests/ 
+#    environment:
+#      KUBECONFIG: /etc/kubernetes/admin.conf
+#    ignore_errors: yes
+
+#helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+#--namespace monitoring \
+#-f ./values/alertmanager-values-demo.yaml \
+#-f ./values/grafana-values-demo.yaml \
+#-f ./values/prometheus-values-demo.yaml \
+#-f ./values/prometheus-operator-values-demo.yaml \
+#--set grafana.adminUser=devops-admin \
+#--set grafana.adminPassword=devops-password \
+#--set-string grafana.'grafana\.ini'.server.root_url="https://k8s-grafana.domain.ru" \
+#--create-namespace

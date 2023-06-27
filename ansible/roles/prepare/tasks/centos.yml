@@ -1,0 +1,314 @@
+---
+- name: Fix disk size
+  shell: |
+    fdisk /dev/sda << EOF
+    n
+    
+    
+
+    
+    w
+    EOF
+    partprobe 
+    pvcreate /dev/sda3
+    vgextend centos /dev/sda3
+    lvextend -l +100%FREE /dev/centos/root
+    xfs_growfs /dev/centos/root
+    df -h
+
+- name: Populate service facts
+  service_facts:
+  ignore_errors: yes
+
+- name: swap off  
+  shell: swapoff -a && sed -i '/ swap / s/^/#/' /etc/fstab
+  when: swap_off
+
+- name: sysctl
+  block:
+    - name: sysctl
+      blockinfile:
+        dest: /etc/sysctl.d/k8s.conf
+        block: |
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.bridge.bridge-nf-call-iptables = 1
+          net.ipv4.ip_forward = 1
+        create: true
+    - name: sysctl apply
+      shell: "sysctl --system"
+
+- name: Set timezone to Europe/Moscow
+  timezone:
+    name: Europe/Moscow
+
+- name: Disable firewalld
+  systemd:
+    name: firewalld.service
+    state: stopped
+    enabled: no
+  when: 
+    - firewalld_disable
+
+
+- name: Disabling SELinux state
+  selinux:
+    state: disabled
+  when: 
+    - selinux_disabled
+    - ansible_facts.selinux.status == 'enabled'
+  register: result_selinux
+
+- name: Reboot 
+  reboot:
+    msg: "Reboot initiated by Ansible after disabling selinux"
+    reboot_timeout: 360
+    connect_timeout: 10
+    post_reboot_delay: 30
+    test_command: whoami
+  when: 
+    - result_selinux.changed
+    - ansible_facts.selinux.status == 'enabled'
+
+- name: certs
+  block:
+  - name:  certs apply
+    copy:
+      src: "{{ item }}"
+      dest: /etc/pki/ca-trust/source/anchors/
+    with_fileglob:
+    - ./certs/*pem
+  - name: update-ca-trust enable && update-ca-trust extract
+    shell: update-ca-trust enable && update-ca-trust extract
+
+- name: ntp
+  block:
+    - name: ntp servers
+      blockinfile:
+        dest: /etc/chrony.conf
+        block: |
+          server 10.10.137.101 iburst
+          server 10.10.31.102 iburst
+    - name: restart chrony rude
+      shell: "systemctl restart chronyd"
+
+- name: Add static dns server
+  block:
+    - name: echo "" > /etc/NetworkManager/NetworkManager.conf
+      shell: echo "" > /etc/NetworkManager/NetworkManager.conf
+    - name: populate inventory into /etc/NetworkManager/NetworkManager.conf file
+      blockinfile:
+        dest: /etc/NetworkManager/NetworkManager.conf
+        block: |-
+          [main]
+          dns=none
+          [logging]
+        state: present
+        create: no
+        backup: no
+    - name: echo "" > /etc/resolv.conf 
+      shell: echo "" > /etc/resolv.conf
+    - name: populate inventory into /etc/resolv.conf file
+      blockinfile:
+        dest: /etc/resolv.conf
+        block: |-
+          {% for item in groups['dns-server'] %}
+          nameserver {{ hostvars[item]['inventory_hostname'] }}
+          {% endfor %}
+          {% for server in extra_nameservers %}
+          nameserver {{ server }}
+          {% endfor %}
+          search {{ domain_name }}
+        state: present
+        create: yes
+        backup: no
+        marker: "#dns server from ansible loop task"
+    - name: delete dublicate records in /etc/resolv.conf
+      shell: awk '!seen[$0]++' /etc/resolv.conf > /etc/resolv.conf.bak && mv -f /etc/resolv.conf.bak /etc/resolv.conf
+    - name: Restart NetworkManager service
+      service:
+        name: NetworkManager
+        enabled: yes
+        state: restarted
+        daemon_reload: yes
+  when: add_static_internal_dns_server
+
+
+- name: Ansible gather file glob /etc/yum.repos.d/
+  find:
+    paths: /etc/yum.repos.d/
+    patterns: "*.repo"
+  register: repo
+
+- name: Ansible remove file glob /etc/yum.repos.d/*.repo
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  with_items: "{{ repo.files }}"
+
+- name: Add internal repo configs
+  block:    
+    - name:  copy multiple files with *repo matching.
+      copy:
+        src: "{{ item }}"
+        dest: /etc/yum.repos.d/
+      with_fileglob:
+        - ./files/docker-ce.repo
+        - ./files/java.repo
+        - ./files/python.repo
+        - ./files/stuff.repo
+        - ./files/vm-tools.repo
+  when: internal_repo
+  
+- name: Add external repos
+  block:
+    - name: Add proxy to /etc/yum.conf
+      blockinfile:
+        dest: /etc/yum.conf
+        block: |
+          proxy=http://10.10.103.202:port
+    - name:  copy multiple file
+      copy:
+        src: "{{ item }}"
+        dest: /etc/yum.repos.d/
+      with_fileglob:
+        - ./files/external.repo
+    - name: Install epel
+      yum:
+        name: "epel-release"
+        state: present
+  when: not internal_repo
+
+- name:  yum clean all
+  command: yum clean all
+
+- name:  yum makecache
+  command: yum makecache
+
+- name: upgrade all packages
+  yum: name=* state=latest
+  when: yum_update
+
+- name: Install stuff packages
+  yum:
+    name: "{{ item }}"
+    state: present
+  with_items: "{{ stuff_packages }}"
+  when: group_packages.stuff and internal_repo
+
+- name: Install java packages
+  yum:
+    name: "{{ item }}"
+    state: present
+  with_items: "{{ java_packages }}"
+  when: group_packages.java and internal_repo
+
+- name: Install k8s packages
+  yum:
+    name: "{{ item }}"
+    state: present
+  with_items: "{{ k8s_packages }}"
+  when: group_packages.k8s and internal_repo
+
+- name: Ensure kubelet is enabled
+  systemd: 
+    name: "kubelet.service"
+    enabled: yes
+  when: group_packages.k8s and internal_repo
+
+- name: Install epel-release packages
+  yum:
+    name: epel-release
+    state: present
+  when: not internal_repo
+
+- name: Install internal_packages packages
+  yum:
+    name: "{{ item }}"
+    state: present
+  with_items: "{{ internal_packages }}"
+  when: not internal_repo
+
+- name:  copy root authorized_keys 
+  copy:
+    src: "{{ item }}"
+    dest: /root/.ssh/authorized_keys
+  with_fileglob:
+    - ./files/authorized_keys
+
+- name: Populate service facts
+  service_facts:
+  ignore_errors: yes
+
+- name: Add env to /etc/environment
+  blockinfile:
+    dest: /etc/environment
+    block: |
+        export http_proxy=http://10.10.103.202:port/
+        export https_proxy=http://10.10.103.202:port/
+
+- name: Block for install docker
+  block:
+    - name: Install docker packages
+      yum:
+        name: "{{ item }}"
+        state: present
+      with_items: "{{ docker_packages }}"
+      notify: Restart docker systemd
+
+    - name: Ensure docker is started
+      systemd: 
+        name: "docker.service" 
+        state: started
+      register: docker_service_started
+
+    - name: Template a file to /etc/docker/daemon.json
+      template:
+        src: daemon.json.j2
+        dest: /etc/docker/daemon.json
+        mode: '0660'
+
+    - name: Creates directory /etc/systemd/system/docker.service.d
+      file:
+        path: /etc/systemd/system/docker.service.d
+        state: directory
+        mode: 0700
+        recurse: yes
+
+    - name: add proxy docker
+      blockinfile:
+        dest: /etc/systemd/system/docker.service.d/http-proxy.conf
+        block: |-
+          [Service]
+          Environment="HTTP_PROXY=http://10.10.103.202:port/"
+          Environment="HTTPS_PROXY=http://10.10.103.202:port/"
+          Environment="NO_PROXY=localhost,127.0.0.0/8"
+        state: present
+        create: yes
+        backup: no
+
+    - name: Ensure docker is enabled
+      systemd: 
+        name: "docker.service"
+        enabled: yes
+        daemon_reload: yes
+
+    - name: restart docker rude
+      shell: "systemctl restart docker"
+      #because fuck this, thats why
+
+    - name: Log into private registry and force re-authorization
+      docker_login:
+        registry: "{{ registry_url }}"
+        username: "{{ registry_user }}"
+        password: "{{ registry_password }}"
+        reauthorize: yes
+
+    - name: Download docker-compose
+      get_url:
+        url:  "{{ nexus_url }}/repository/{{ docker_compose_bin }}"
+        dest: /usr/local/bin/docker-compose
+        mode: '0700'
+        validate_certs: no
+  when: 
+    - group_packages.docker and (ansible_facts.services["docker.service"] is not defined)
+ 

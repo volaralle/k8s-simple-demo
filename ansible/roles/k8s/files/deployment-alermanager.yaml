@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+   name: telegram-alertmanager
+   labels:
+     app: telegram
+spec:
+   template:
+     metadata:
+       name: telegram-alertmanager
+       labels:
+         app: telegram
+     spec:
+       containers:
+         - name: telegram-alertmanager
+           image: python/alertmanager:latest
+           ports:
+             - containerPort: 8080
+           env:
+             - name: TELEGRAM_CHAT_ID
+               value: "-134...02"
+             - name: TELEGRAM_TOKEN
+               value: '82...8913:asdfasdf'
+             - name: "HTTP_PROXY"
+               value: "http://10.10.103.202:port/"
+             - name: "HTTPS_PROXY"
+               value: "http://10.10.103.202:port/"
+   replicas: 1
+   selector:
+     matchLabels:
+       app: telegram
+---
+apiVersion: v1
+kind: Service
+metadata:
+ labels:
+   app: telegram
+ name: telegram-alertmanager
+spec:
+ type: ClusterIP
+ selector:
+   app: telegram
+ ports:
+   - protocol: TCP
+     port: 8080
+

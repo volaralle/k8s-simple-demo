@@ -1,0 +1,61 @@
+---
+- name: Fix disk size
+  include_tasks: "disk.yml"
+  tags: disk
+
+- name: Reset Kubernetes component.
+  shell: "kubeadm reset --force"
+  when: reset
+  
+- name: Reset Kubernetes component.
+  shell: "rm -rf /etc/kubernetes/*"
+  when: reset
+
+- name: Creates directory /etc/kubernetes/manifests/
+  file:
+    path: /etc/kubernetes/manifests
+    state: directory
+    mode: 0700
+    recurse: yes
+
+- name: Init cluster.
+  include_tasks: "init.yml"
+  when: inventory_hostname in groups["k8s-master"]
+  tags: init
+
+- name: Prepare nodes.
+  include_tasks: "prepare-nodes.yml"
+  when: inventory_hostname != "{{ groups['k8s-master'][0] }}"
+  tags: prepare_nodes
+
+- name: Applications install.
+  include_tasks: "applications.yml"
+  tags: application
+
+- name: Exporters install.
+  include_tasks: "exporters.yml"
+  tags: exporters
+
+- name: Join cluster.
+  include_tasks: "join.yml"
+  tags: join
+
+- name: Afterparty tasks cluster.
+  include_tasks: "afterparty.yml"
+  tags: afterparty
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

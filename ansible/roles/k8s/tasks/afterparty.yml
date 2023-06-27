@@ -1,0 +1,10 @@
+- name: Apply other manifests
+  shell: |
+    kubectl apply \
+      -f /root/k8s/longhorn-external.yaml \
+      -f /root/k8s/example-ingresses.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  delegate_to: "{{ groups['k8s-master'][0] }}" 
+  run_once: true
+  tags: monitoring

@@ -1,0 +1,56 @@
+---
+add_static_internal_dns_server: true
+internal_repo: true
+firewalld_disable: true
+selinux_disabled: true
+group_packages:
+  docker: false
+  stuff: true
+  java: false
+  k8s: false
+
+swap_off: false
+
+os_populate_inventory_to_hosts_file: true
+
+internal_packages:
+  - htop
+  - vim
+  - lnav
+  - iscsi-initiator-utils
+docker_packages:
+  - docker-ce-cli.x86_64
+  - docker-ce.x86_64
+  - docker-scan-plugin.x86_64
+  - docker-compose-plugin.x86_64
+  - python-docker-py.noarch
+  - python-chardet.noarch
+  
+stuff_packages:
+  - geoipupdate
+  - bind-utils.x86_64
+  - vim-common.x86_64 
+  - vim-minimal.x86_64 
+  - vim-filesystem.x86_64
+  - vim-enhanced.x86_64
+  - lnav.x86_64
+  - htop.x86_64
+  - wget.x86_64 
+  - jq.x86_64
+  - pyOpenSSL.x86_64
+  - ca-certificates.noarch
+  - net-tools
+  - ipvsadm
+  - ebtables
+  - device-mapper-persistent-data
+  - lvm2
+  - container-selinux
+    
+k8s_packages:
+  - kubelet-1.21.14-0
+  - kubeadm-1.21.14-0
+  - kubectl-1.21.14-0
+  - iscsi-initiator-utils
+
+node_exporter: false    
+

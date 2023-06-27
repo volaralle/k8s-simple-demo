@@ -1,0 +1,36 @@
+- block: 
+  - name: Apply metallb
+    shell: |
+      kubectl apply \
+        -f /root/k8s/metal.yaml 
+    environment:
+      KUBECONFIG: /etc/kubernetes/admin.conf
+
+  - name: Sleep for 120 seconds and continue with play
+    ansible.builtin.wait_for:
+      timeout: 120
+
+  - name: Apply ml-configmap.yaml 
+    shell: |
+      kubectl apply \
+        -f /root/k8s/ml-configmap.yaml 
+    environment:
+      KUBECONFIG: /etc/kubernetes/admin.conf
+
+  - name: Apply cert-manager
+    shell: |
+      kubectl apply \
+        -f /root/k8s/cert-manager.yaml
+    environment:
+      KUBECONFIG: /etc/kubernetes/admin.conf
+      
+  - name: Apply ingress-controller 
+    shell: |
+      kubectl apply \
+        -f /root/k8s/ingress-controller.yaml 
+    environment:
+      KUBECONFIG: /etc/kubernetes/admin.conf
+
+  ignore_errors: true
+  run_once: true
+  delegate_to: "{{ groups['k8s-master'][0] }}" 

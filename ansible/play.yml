@@ -19,7 +19,7 @@
   vars_files:
     - ./vars.yml    
   roles:
-    - role: roles/gp.ansible-roles/prepare
+    - role: roles/prepare
       tags: prepare
       vars:
         add_static_internal_dns_server: true
@@ -33,5 +33,5 @@
           java: false
           k8s: true
       when: prepare_host
-    - role: roles/gp.ansible-roles/k8s
+    - role: roles/k8s
       tags: k8s

@@ -1,0 +1,109 @@
+---
+- block:
+  - name: Creates directory /root/k8s
+    file:
+      path: /root/k8s
+      state: directory
+      mode: 0700
+      recurse: yes
+
+  - name: Creates directory /etc/kubernetes/manifests/
+    file:
+      path: /etc/kubernetes/manifests
+      state: directory
+      mode: 0700
+      recurse: yes
+
+  - name: Templating init files
+    template:
+      src: "{{ item }}"
+      dest: /root/k8s/{{ item | basename | regex_replace('\.j2$', '') }}
+      mode: '0600'
+    with_fileglob:
+      - templates/kubeadm-config.yaml.j2
+      - templates/vip-Pod.yaml.j2
+      - templates/ml-configmap.yaml.j2
+      - templates/vip-DaemonSet.yaml.j2
+
+  - name: copy yamls
+    copy:
+      src: "{{ item }}"
+      dest: /root/k8s/
+      mode: '0600'
+    with_fileglob:
+      - files/*yaml
+
+  - name: Copy vip-Pod
+    shell: "cp /root/k8s/vip-Pod.yaml /etc/kubernetes/manifests/"
+
+#  - name: Migrate config
+#    shell: kubeadm config migrate --old-config /root/k8s/kubeadm-config.yaml --new-config /root/k8s/new.yaml && mv -f /root/k8s/new.yaml /root/k8s/kubeadm-config.yaml 
+#    register: init_k8s
+#    when: k8s_version == "1.26.1"
+
+  - name: Init cluster
+    shell: kubeadm init --config /root/k8s/kubeadm-config.yaml
+    register: init_k8s
+
+  - name: Kubectl taint nodes
+    shell: |
+        kubectl taint nodes --all node-role.kubernetes.io/master-
+    environment:
+      KUBECONFIG: /etc/kubernetes/admin.conf
+
+  - name: Apply flannel
+    shell: |
+      kubectl apply \
+        -f /root/k8s/flannel.yaml 
+    environment:
+      KUBECONFIG: /etc/kubernetes/admin.conf
+
+  - name: Apply kube-vip additional manifests
+    shell: |
+      kubectl apply \
+        -f /root/k8s/vip-ServiceAccount.yaml
+    environment:
+      KUBECONFIG: /etc/kubernetes/admin.conf
+    #        -f /root/k8s/vip-DaemonSet.yaml \
+    # с daemonset-ом  kube-vip обнаружены проблемы, не загружается при инициализации из директории манифестов
+    # и не работает впрнцп, так что раскидывывается манифест на поды на ноды мастеров), подробнее: 
+    # https://github.com/kube-vip/kube-vip/blob/main/docs/control-plane/index.md 
+
+  - name: Save init info in local file
+    local_action:
+      module: copy
+      content: "{{ init_k8s.stdout }}"
+      dest: ./init_cluster_result.txt
+
+  - name: Save admin.conf
+    fetch:
+      src: /etc/kubernetes/admin.conf
+      dest: ./admin.conf
+      flat: yes
+
+  - name: Add env to /root/.bashrc
+    blockinfile:
+      dest: /root/.bashrc
+      block: |
+        export KUBECONFIG=/etc/kubernetes/admin.conf
+
+  - name: "Token var save cluster"
+    shell: kubeadm token create --print-join-command    
+    register: join_result
+
+
+  - name: Compress directory /etc/kubernetes/pki/ into /root/pki.tgz
+    archive:
+      path: /etc/kubernetes/pki/
+      dest: /root/pki.tgz
+      
+  - name: Save pki.tgz
+    fetch:
+      src: /root/pki.tgz
+      dest: ./roles/gp.ansible-roles/k8s/files/pki.tgz
+      flat: yes
+
+  ignore_errors: true
+  run_once: true
+  delegate_to: "{{ groups['k8s-master'][0] }}" 
+

@@ -1,0 +1,14 @@
+- block:
+  - name: Creates directory /etc/kubernetes/pki
+    file:
+      path: /etc/kubernetes/pki
+      state: directory
+      mode: 0700
+      recurse: yes
+
+  - name: Extract pki.tgz into /etc/kubernetes/pki
+    unarchive:
+      src: pki.tgz
+      dest: /etc/kubernetes/pki
+  ignore_errors: true
+  when:  (inventory_hostname in groups["k8s-master"] and inventory_hostname != "{{ groups['k8s-master'][0] }}")

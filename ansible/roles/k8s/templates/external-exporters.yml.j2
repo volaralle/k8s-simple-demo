@@ -1,0 +1,42 @@
+{% for entry in item %}
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: {{ item.service }}-server-monitor
+  labels:
+    app: {{ item.service }}-server-monitor
+spec:
+ type: ClusterIP
+ ports:
+ - name: {{ item.service }}-metrics-server
+   port: 80
+   targetPort: 9100
+---
+kind: Endpoints
+apiVersion: v1
+metadata:
+  name: {{ item.service }}-server-monitor
+  labels:
+    app: {{ item.service }}-server-monitor
+subsets:
+  - addresses:
+    - ip:  {{ item.ip }}
+    ports:
+      - name: {{ item.service }}-metrics-server
+        port: 9100
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ item.service }}-server-monitor
+  labels:
+    release: monitoring
+spec:
+  endpoints:
+  - interval: 30s
+    port: {{ item.service }}-metrics-server
+  selector:
+    matchLabels:
+      app: {{ item.service }}-server-monitor
+{% endfor %}

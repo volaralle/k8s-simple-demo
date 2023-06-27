@@ -1,0 +1,16 @@
+- name: Fix disk size
+  shell: |
+    fdisk /dev/sda << EOF
+    n
+    
+    
+
+    
+    w
+    EOF
+    partprobe 
+    pvcreate /dev/sda3
+    vgextend centos /dev/sda3
+    lvextend -l +100%FREE /dev/centos/root
+    xfs_growfs /dev/centos/root
+    df -h
