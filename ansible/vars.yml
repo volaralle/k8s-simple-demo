@@ -1,0 +1,21 @@
+external_exporters:
+  - service: nexus
+    ip: some.ip.for.external_exporter
+  - service: runner
+    ip: some.ip.for.external_exporter
+
+certSANs:
+  - "k8s-master-01"
+  - "k8s-master-02"
+  - "k8s-master-03"
+  - "k8s-master-01.domain.ru"
+  - "k8s-master-02.domain.ru"
+  - "k8s-master-03.domain.ru"
+  - "all.ip.used.in_cluster"
+  - "all.ip.used.in_cluster"
+  - "all.ip.used.in_cluster"
+  - "all.ip.used.in_cluster"
+  - "all.ip.used.in_cluster"
+  - "10.10.103.1"
+  - "10.10.103.2"
+  - "..."

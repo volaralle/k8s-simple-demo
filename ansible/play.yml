@@ -1,0 +1,37 @@
+---
+- name: install 
+  gather_facts: yes
+  hosts: 
+    - k8s-master
+    - k8s-worker
+  remote_user: root 
+  become: yes
+  environment:
+    GODEBUG: x509ignoreCN=0
+    KUBE_PROXY_MODE: ipvs
+  vars:
+    reset: true
+    kube_vip: "10.10.103.188"
+    metallb_pool: "10.10.103.187-10.10.103.187"
+    prepare_host: true  
+    swap_off: true
+    node_exporter: false
+  vars_files:
+    - ./vars.yml    
+  roles:
+    - role: roles/gp.ansible-roles/prepare
+      tags: prepare
+      vars:
+        add_static_internal_dns_server: true
+        extra_nameservers:
+          - "10.10.103.202"
+        firewalld_disable: true
+        selinux_disabled: true
+        group_packages:
+          docker: true
+          stuff: true
+          java: false
+          k8s: true
+      when: prepare_host
+    - role: roles/gp.ansible-roles/k8s
+      tags: k8s
